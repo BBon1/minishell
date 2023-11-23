@@ -12,9 +12,7 @@
 //  VARIABLES GLOBALES
 pid_t * hijos;  // Array dinamico de pids
 tline * line; // Array dinamico de tlines
-int * status;
-static int contador = -1; // Variable para indicar que mandato toca ejecutar
-int i;
+int i; // Variable para indicar que mandato toca ejecutar
 
 void manejador_mandatos ();
 
@@ -25,7 +23,7 @@ int main() {
 	
 	pid_t pid;
 	hijos = (pid_t*)calloc(10, sizeof(pid_t));
-	status = (int*)calloc(10, sizeof(int));
+	
 	int file_input, file_output, file_error;
 	
 	signal(SIGUSR1, manejador_mandatos); // Minishell llama al manejador para ejecutar mandatos
@@ -52,11 +50,47 @@ int main() {
 			continue;
 		}
 		
-		//Redirección input
-		if (line->redirect_input != NULL){
-			file_input = open(line->redirect_input , O_RDONLY);
-			dup2(file_input ,0);
+		
+		// Crear los hijos necesarios
+		for (i = 0 ; i < line->ncommands; i ++){ //Crear los hijos de cada mandato
+			pid = fork();
+			if (pid == 0){
+				pause(); //Dejar esperandolos hasta recibir una señal
+			} else {
+				hijos[i] = pid;
+			}
 		}
+		
+		
+		// Despertar el primer hijo/mandato (ultimo)
+		kill(hijos[line->ncommands-1], SIGUSR1);
+		
+		
+		
+		// La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
+		if ( !(line->background) ){ 
+			waitpid(hijos[line->ncommands-1], NULL, 0);
+		} else {
+			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
+		}
+				
+		
+		// Siguiente
+		printf("==> ");	
+	}
+
+	return 0;
+}
+
+
+
+
+void manejador_mandatos (){
+	signal(2 ,SIG_DFL); // Los hijos si mueren con ctrl+c
+	
+	if (i == line->ncommands-1){ // Ultimo hijo utimo mandato n
+		kill(hijos[i-1], SIGUSR1); // Despertar al resto de hijos
+		sleep(i);
 		
 		// Redirecciones de output y error
 		if (line->redirect_output != NULL) {
@@ -70,55 +104,7 @@ int main() {
 			dup2(file_error,2);
 		}
 		
-		
-		// Crear los hijos necesarios
-		signal(2 ,SIG_DFL); // Los hijos si mueren con ctrl+c
-		for (i = 0 ; i < line->ncommands; i ++){ //Crear los hijos de cada mandato
-			
-			pid = fork();
-			if (pid == 0){
-				pause(); //Dejar esperandolos hasta recibir una señal
-			} else {
-				hijos[i] = pid;
-			}
-		}
-		signal(2 ,SIG_IGN); // La minishell vuelve a ignorar
-		
-		
-		// Ejecutar el primer mandato
-		
-		kill(hijos[line->ncommands-1], SIGUSR1);
-		waitpid(hijos[line->ncommands-1], &status[0], 0);
-		
-		
-		
-		
-		// La minishell solo espera si se ejecuta en primer plano, y solo espera al ultimo mandato
-		//if ( !(line->background) ){ 
-		//	waitpid(hijos[0], NULL, 0);
-		//}
-				
-		
-		
-		//Ya se han terminado todos los mandatos
-		printf("==> ");	
-	}
-
-	return 0;
-}
-
-
-
-
-void manejador_mandatos (){
-	contador = i;
-	// contador = line->ncommands - (i+1);
-	
-	if (i == line->ncommands-1){ // Ultimo hijo utimo mandato n
-		kill(hijos[i-1], SIGUSR1); // Despertar al resto de hijos
-		sleep(i);
-		
-		execvp(line->commands[contador].filename , line->commands[contador].argv);
+		execvp(line->commands[i].filename , line->commands[i].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
 	}
@@ -127,14 +113,23 @@ void manejador_mandatos (){
 		kill(hijos[i-1], SIGUSR1); // Despertar al resto de hijos
 		sleep(i);
 		
-		execvp(line->commands[contador].filename , line->commands[contador].argv);
+		execvp(line->commands[i].filename , line->commands[i].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
 		
 	} else { // Primer hijo, primer mandato - Hijo 0
-		execvp(line->commands[contador].filename , line->commands[contador].argv);
+	
+		//Redirección input
+		if (line->redirect_input != NULL){
+			file_input = open(line->redirect_input , O_RDONLY);
+			dup2(file_input ,0);
+		}
+		
+		execvp(line->commands[i].filename , line->commands[i].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
-	}	 
+	}	
+	
+	 
 		
 }
