@@ -11,33 +11,32 @@
 
 //  VARIABLES GLOBALES
 pid_t * hijos;  // Array dinamico de pids
+int * tub; // Array dinámico de los pipes
 tline * line; // Array dinamico de tlines
-int i; // Variable para indicar que mandato toca ejecutar
+int m; // Variable para indicar que mandato toca ejecutar
 
 void manejador_mandatos ();
 
 int main() {
 	// Poner todas las declaraciones de variables locales al principio del main (o funciones)
 	char buf[1024];
+	int i; // Variable para los for
 	char check_exit [] = "exit\n";
-	
-	pid_t pid;
-	hijos = (pid_t*)calloc(10, sizeof(pid_t));
-	
-	int file_input, file_output, file_error;
+	pid_t pid;	
 	
 	signal(SIGUSR1, manejador_mandatos); // Minishell llama al manejador para ejecutar mandatos
 	signal(2 ,SIG_IGN);  // Mini shell ignora Ctrl+C
 	
-	
-	printf("==> ");	
+	printf("miniShell ==> ");	
 	while (fgets(buf, 1024, stdin)) {  // MINISHELL
 		
 		if (strcmp(check_exit, buf) == 0){ // Escribir exit para poder salir de la minishell
 			printf("Saliendo de la minishell...\n");
-			free(hijos);
-			free(status);
+			// Liberar memoria dinamica, cerrar pipes...
+			free(line);
+			free(hijos); 
 			return 0;
+			
 		} else if (strcmp("\n", buf) == 0){ // Escribir exit para poder salir de la minishell
 			printf("==> ");
 			continue;
@@ -50,22 +49,19 @@ int main() {
 			continue;
 		}
 		
-		
 		// Crear los hijos necesarios
-		for (i = 0 ; i < line->ncommands; i ++){ //Crear los hijos de cada mandato
+		hijos = (pid_t*)calloc(line->ncommands, sizeof(pid_t));
+		for (m = 0 ; m < line->ncommands; m ++){ //Crear un hijo para cada mandato, la variable global m cambia de valor al final del for
 			pid = fork();
 			if (pid == 0){
 				pause(); //Dejar esperandolos hasta recibir una señal
 			} else {
-				hijos[i] = pid;
+				hijos[m] = pid;
 			}
 		}
 		
-		
 		// Despertar el primer hijo/mandato (ultimo)
 		kill(hijos[line->ncommands-1], SIGUSR1);
-		
-		
 		
 		// La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
 		if ( !(line->background) ){ 
@@ -74,9 +70,8 @@ int main() {
 			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
 		}
 				
-		
 		// Siguiente
-		printf("==> ");	
+		printf("miniShell ==> ");	
 	}
 
 	return 0;
@@ -86,11 +81,16 @@ int main() {
 
 
 void manejador_mandatos (){
+	int file_input, file_output, file_error;  //Ficheros utilizados si hay redirecciones de input, output o error
+	
 	signal(2 ,SIG_DFL); // Los hijos si mueren con ctrl+c
 	
-	if (i == line->ncommands-1){ // Ultimo hijo utimo mandato n
-		kill(hijos[i-1], SIGUSR1); // Despertar al resto de hijos
-		sleep(i);
+	if (m == line->ncommands-1){ // Ultimo hijo utimo mandato m
+		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
+
+		//  REDIRECCION DE PIPES POR AQUI s
+		// dup2(pipe[m-1][1], 1);  pipe  -> salida std 
+		sleep(m); // APAÑO
 		
 		// Redirecciones de output y error
 		if (line->redirect_output != NULL) {
@@ -103,17 +103,19 @@ void manejador_mandatos (){
 			file_error = open(line->redirect_error , O_WRONLY | O_CREAT, 0666);
 			dup2(file_error,2);
 		}
-		
-		execvp(line->commands[i].filename , line->commands[i].argv);
+		// Ejecutar mandato
+		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
-	}
-	
-	if (i > 0){ //Mandato intermedios Hijo - (n,0)
-		kill(hijos[i-1], SIGUSR1); // Despertar al resto de hijos
-		sleep(i);
+	}else if (m > 0){ //Mandato intermedios Hijo - (m,0)
+		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
 		
-		execvp(line->commands[i].filename , line->commands[i].argv);
+		//  REDIRECCION DE PIPES POR AQUI	
+		// dup2(pipe[m+1][1], 0);  pipe  -> salida std 
+		sleep(i); // APAÑO
+		
+		// Ejecutar mandato
+		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
 		
@@ -124,8 +126,8 @@ void manejador_mandatos (){
 			file_input = open(line->redirect_input , O_RDONLY);
 			dup2(file_input ,0);
 		}
-		
-		execvp(line->commands[i].filename , line->commands[i].argv);
+		// Ejecutar mandato
+		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
 	}	
