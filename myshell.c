@@ -42,7 +42,7 @@ int main() {
 			continue;
 		}
 		
-		line = tokenize(buf);  // GET mandatos
+		line = tokenize(buf);  // Obtener los mandatos
 		
 		if (line==NULL) {
 			printf("Ha surgido un error al reservar espacio en memoria\n");
@@ -75,13 +75,13 @@ int main() {
 			close (tube[i].tuberia[0]); 
 		}
 		
-		/* La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
+		// La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
 		if ( !(line->background) ){ 
-			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
+			waitpid(hijos[line->ncommands-1], NULL, 0);
 		} else {
 			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
 		}
-		*/
+		
 			
 		// Siguiente
 		printf("miniShell ==> ");	
