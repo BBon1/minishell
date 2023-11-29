@@ -70,6 +70,10 @@ int main() {
 		// Despertar el primer hijo/mandato (ultimo)
 		kill(hijos[line->ncommands-1], SIGUSR1);
 		
+		for (i = 0; i < line->ncommands; i++){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
 		
 		/* La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
 		if ( !(line->background) ){ 
@@ -97,16 +101,9 @@ void manejador_mandatos (){
 	
 	if ( line->ncommands != 1 && m == line->ncommands-1 ){ // Ultimo hijo utimo mandato m, distinto de 0
 	
-		
-	
 		//  REDIRECCION DE PIPES / entrada
-		/*
-		for (i = 0; i < m; i++){
-			close (tube[i].tuberia[1]); 
-			close (tube[i].tuberia[0]); 
-		}
-		*/
-		close (tube[m-1].tuberia[1]); 
+		
+		
 		dup2(tube[m-1].tuberia[0], 0); // pipe  -> entrada 
 		
 		// Redirecciones de output y error
@@ -123,6 +120,13 @@ void manejador_mandatos (){
 		
 		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
 		
+		for (i = 0; i < m-1; i++){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
+		
+		close (tube[m-1].tuberia[1]); 
+		
 		// Ejecutar mandato
 		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
@@ -131,7 +135,13 @@ void manejador_mandatos (){
 	}else if ( line->ncommands != 1 && m > 0){ //Mandato intermedios Hijo - (m,0)
 		
 		//  REDIRECCION DE PIPES POR AQUI
-		/*
+		
+		
+		dup2(tube[m-1].tuberia[0], 0); // pipe lectura -> stdin
+		dup2(tube[m].tuberia[1], 1); //  pipe salida -> stdout
+		
+		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
+		
 		for (i = 0; i < m-1; i++){
 			close (tube[i].tuberia[1]); 
 			close (tube[i].tuberia[0]); 
@@ -140,15 +150,9 @@ void manejador_mandatos (){
 			close (tube[i].tuberia[1]); 
 			close (tube[i].tuberia[0]); 
 		}
-		*/
+		
 		close (tube[m-1].tuberia[1]);	
 		close (tube[m].tuberia[0]);
-		
-		dup2(tube[m-1].tuberia[0], 0); // pipe lectura -> stdin
-		dup2(tube[m].tuberia[1], 1); //  pipe salida -> stdout
-		
-		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
-		
 		// Ejecutar mandato
 		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
@@ -157,12 +161,12 @@ void manejador_mandatos (){
 	} else { // Primer hijo, primer mandato - Hijo 0 / Un solo hijo
 		
 		//  REDIRECCION DE PIPES
-		/*
+		
 		for (i = line->ncommands-1; i > 0; i--){
 			close (tube[i].tuberia[1]); 
 			close (tube[i].tuberia[0]); 
 		}
-		*/
+		
 		close(tube[m].tuberia[0]); // cerrar el pipe[0]
 		if (line->ncommands > 1){  // Si hay mas de 1 mandato, redireccionar salida
 			dup2(tube[m].tuberia[1], 1); // pipe[0][1]  -> salida 
