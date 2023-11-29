@@ -27,19 +27,18 @@ int main() {
 	signal(SIGUSR1, manejador_mandatos); // Minishell llama al manejador para ejecutar mandatos
 	signal(2 ,SIG_IGN);  // Mini shell ignora Ctrl+C
 	
-	printf("miniShell ==> ");	
+	printf("miniShell ==> Empezando minishell \nminiShell ==> ");	
 	while (fgets(buf, 1024, stdin)) {  // MINISHELL
-		
+	
 		if (strcmp(check_exit, buf) == 0){ // Escribir exit para poder salir de la minishell
 			printf("Saliendo de la minishell...\n");
-			// Liberar memoria dinamica, cerrar pipes...
+			// Liberar memoria dinamica...
 			free(tube);
 			free(hijos); 
-			// CLOSE PIPES
 			return 0;
 			
 		} else if (strcmp("\n", buf) == 0){ // Escribir exit para poder salir de la minishell
-			printf("minishell ==> ");
+			printf("miniShell ==> ");
 			continue;
 		}
 		
@@ -54,33 +53,32 @@ int main() {
 		hijos = (pid_t*)calloc (line->ncommands, sizeof(pid_t));
 		
 		tube = (tub *)calloc(line->ncommands-1, sizeof(tub));
-		for (i = 0; i < line->ncommands; i++){
+		for (i = 0; i < line->ncommands; i++){ // crear los pipes antes de que crear los hijos
 			pipe(tube[i].tuberia);
 		}
 		
 		for (m = 0 ; m < line->ncommands; m ++){ //Crear un hijo para cada mandato, la variable global m cambia de valor al final del for	
-			
 			pid = fork();
 			if (pid == 0){
 				pause(); //Dejar esperandolos hasta recibir una señal
 			} else {
 				hijos[m] = pid;
-				close(tube[m].tuberia[0]);
-				close(tube[m].tuberia[1]);
 			}
 		}
+		
 		
 		// Despertar el primer hijo/mandato (ultimo)
 		kill(hijos[line->ncommands-1], SIGUSR1);
 		
 		
-		// La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
+		/* La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
 		if ( !(line->background) ){ 
-			waitpid(hijos[line->ncommands-1], NULL, 0);
+			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
 		} else {
 			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
 		}
-				
+		*/
+			
 		// Siguiente
 		printf("miniShell ==> ");	
 	}
@@ -99,11 +97,17 @@ void manejador_mandatos (){
 	
 	if ( line->ncommands != 1 && m == line->ncommands-1 ){ // Ultimo hijo utimo mandato m, distinto de 0
 	
-		//  REDIRECCION DE PIPES / entrada
 		
+	
+		//  REDIRECCION DE PIPES / entrada
+		/*
+		for (i = 0; i < m; i++){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
+		*/
 		close (tube[m-1].tuberia[1]); 
 		dup2(tube[m-1].tuberia[0], 0); // pipe  -> entrada 
-		
 		
 		// Redirecciones de output y error
 		if (line->redirect_output != NULL) {
@@ -116,26 +120,34 @@ void manejador_mandatos (){
 			file_error = open(line->redirect_error , O_WRONLY | O_CREAT, 0666);
 			dup2(file_error,2);
 		}
-	
-	
-		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
 		
+		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
 		
 		// Ejecutar mandato
 		execvp(line->commands[m].filename , line->commands[m].argv);
 		fprintf(stderr, "Error al ejecutar el programa\n");
 		exit(1);
 		
-	}else if (line->ncommands != 1 && m > 0){ //Mandato intermedios Hijo - (m,0)
-		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
+	}else if ( line->ncommands != 1 && m > 0){ //Mandato intermedios Hijo - (m,0)
 		
 		//  REDIRECCION DE PIPES POR AQUI
-		
+		/*
+		for (i = 0; i < m-1; i++){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
+		for (i = m+1; i < line->ncommands-1; i++){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
+		*/
 		close (tube[m-1].tuberia[1]);	
 		close (tube[m].tuberia[0]);
+		
 		dup2(tube[m-1].tuberia[0], 0); // pipe lectura -> stdin
 		dup2(tube[m].tuberia[1], 1); //  pipe salida -> stdout
 		
+		kill(hijos[m-1], SIGUSR1); // Despertar al resto de hijos
 		
 		// Ejecutar mandato
 		execvp(line->commands[m].filename , line->commands[m].argv);
@@ -145,6 +157,12 @@ void manejador_mandatos (){
 	} else { // Primer hijo, primer mandato - Hijo 0 / Un solo hijo
 		
 		//  REDIRECCION DE PIPES
+		/*
+		for (i = line->ncommands-1; i > 0; i--){
+			close (tube[i].tuberia[1]); 
+			close (tube[i].tuberia[0]); 
+		}
+		*/
 		close(tube[m].tuberia[0]); // cerrar el pipe[0]
 		if (line->ncommands > 1){  // Si hay mas de 1 mandato, redireccionar salida
 			dup2(tube[m].tuberia[1], 1); // pipe[0][1]  -> salida 
