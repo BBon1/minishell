@@ -14,5 +14,9 @@ typedef struct {
 	int background;
 } tline;
 
+typedef struct {
+	int tuberia [2];
+} tub;
+
 extern tline * tokenize(char *str);
 
