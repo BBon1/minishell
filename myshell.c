@@ -17,11 +17,15 @@
 pid_t hijos[2] = {0, 0};
 int i;
 void manejador_hijo();
+void sigint_handler();
 tline * line;
 int pipe2Man[2];
 
 
 int main (){
+    // Establecer el manejador de señales para SIGINT
+    signal(SIGINT, sigint_handler);
+
     // Creamos el buffer donde se almacenara la línea de entrada:
     char buf[1024];
     pipe(pipe2Man);
@@ -53,24 +57,43 @@ int main (){
 
             if (((line->ncommands == 1) && (line->redirect_input == NULL) )&& (line->redirect_output == NULL)){
 
-                // Creamos directamente un hijo que ejecute el mandato pedido con los respectivos argumentos:
-                pid_t  pid_1msr;
-                pid_1msr = fork();
+                // Comprobamos si es el mandato cd:
+                if (strcmp(line->commands[0].argv[0], "cd") == 0) {
+                    if (line->commands[0].argv[1] == NULL) {
+                        // Si no se proporciona un argumento, cambiar al directorio HOME
+                        const char *home_dir = getenv("HOME");
+                        if (home_dir != NULL) {
+                            chdir(home_dir);
+                        } else {
+                            perror("cd");
+                        }
+                    } else {
+                        // Cambiar al directorio especificado
+                        if (chdir(line->commands[0].argv[1]) != 0) {
+                            perror("cd");
+                        }
+                    }
+                } else {
+
+                    // Creamos directamente un hijo que ejecute el mandato pedido con los respectivos argumentos:
+                    pid_t  pid_1msr;
+                    pid_1msr = fork();
 
 
-                if (pid_1msr < 0) {         // Error en la creacion del hijo:
-                    fprintf(stderr, "Falló el fork() de un mandato sin redirecciones.\n%s\n", strerror(errno));
-                    return 1;
+                    if (pid_1msr < 0) {         // Error en la creacion del hijo:
+                        fprintf(stderr, "Falló el fork() de un mandato sin redirecciones.\n%s\n", strerror(errno));
+                        return 1;
 
-                } else if (pid_1msr == 0) {      // Proceso Hijo
-                    execvp(line->commands[0].argv[0], line->commands[0].argv);
-                    //Si llega aquí es que se ha producido un error en el execvp
-                    printf("Error al ejecutar el comando: cod 1 %s\n", strerror(errno));
-                    return 1;
+                    } else if (pid_1msr == 0) {      // Proceso Hijo
+                        execvp(line->commands[0].argv[0], line->commands[0].argv);
+                        //Si llega aquí es que se ha producido un error en el execvp
+                        printf("Error al ejecutar el comando: cod 1 %s\n", strerror(errno));
+                        return 1;
 
-                }
-                else {      // Proceso Padre.
-                    wait (NULL);
+                    }
+                    else {      // Proceso Padre.
+                        wait (NULL);
+                    }
                 }
             }
 
@@ -176,4 +199,8 @@ void manejador_hijo()
     //Si llega aquí es que se ha producido un error en el execvp
     printf("Error al ejecutar el mandato: cod 2 %s\n", strerror(errno));
     exit(1);
+}
+
+void sigint_handler() {
+    // Manejador para la señal SIGINT (Ctrl+C) de la shell
 }
