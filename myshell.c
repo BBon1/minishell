@@ -11,29 +11,51 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 
-
 #include "parser.h"
 
-pid_t hijos[2] = {0, 0};
+// Estructura para las tuberias:
+typedef struct {
+    int p[2];
+} tPipe;
+
+// Variables globales:
+// Pids:
+pid_t hijos2Mandatos[2] = {0, 0};
+pid_t * hijos;  // Para el array dinamico de pids de hijos
+
 int i;
-void manejador_hijo();
+tline * line;   // Entrada
+
+// Pipes
+int pipe2Mandatos[2];
+tPipe * pipes; // Para el array dinamico de pipes
+
+// Funciones auxiliares
+void manejador_hijo2Mandatos();
 void sigint_handler();
-tline * line;
-int pipe2Man[2];
 
 
 int main (){
-    // Establecer el manejador de señales para SIGINT
+
+    // Establecer el manejador de señales para SIGINT (ingnoramos el ctr+c)
     signal(SIGINT, sigint_handler);
 
     // Creamos el buffer donde se almacenara la línea de entrada:
     char buf[1024];
-    pipe(pipe2Man);
+    pipe(pipe2Mandatos);
+
+    // Averiguamos el directorio en el que estamos trabajando
+    char cwd[1024];
+    const char * directorio = getcwd(cwd, sizeof(cwd));
 
 
     // Imprimimos el prompt:
-    printf("msh > ");
+    printf("msh (%s)> ", directorio);
     while (fgets(buf, 1024, stdin)) {
+
+        // Comprobamos si hay hijos sin terminar en el background
+//        comprobarBG();
+
 
         // Si la línea no contiene nada directamente ejecutamos de nuevo el prompt:
         if (buf[0] == '\n') {
@@ -41,11 +63,13 @@ int main (){
             continue;
         }
 
+
         // Tokenizamos la entrada para saber que mandatos y redirecciones tenemos:
         line = tokenize(buf);
 
-        // Si el mandato es un exit terminamos la ejecución de la MiniShell:
+        // Si el mandato es un exit terminamos la ejecución de la MiniShell: (primero debemos matar todos los hijos que sigan en el bg)
         if (strcmp(line->commands[0].argv[0], "exit") == 0) {
+// Matar hijos BG
             break;
 
             // Si no, primero comprobamos cuantos mandatos nos pasan:
@@ -63,6 +87,7 @@ int main (){
                         // Si no se proporciona un argumento, cambiar al directorio HOME
                         const char *home_dir = getenv("HOME");
                         if (home_dir != NULL) {
+                            directorio = home_dir;
                             chdir(home_dir);
                         } else {
                             perror("cd");
@@ -70,6 +95,7 @@ int main (){
                     } else {
                         // Cambiar al directorio especificado
                         if (chdir(line->commands[0].argv[1]) != 0) {
+                            directorio = line->commands[0].argv[1];
                             perror("cd");
                         }
                     }
@@ -149,7 +175,7 @@ int main (){
             else if (line->ncommands == 2) {
                 int com = line->ncommands;
                 pid_t pid;
-                signal(SIGUSR2, manejador_hijo);
+                signal(SIGUSR2, manejador_hijo2Mandatos);
 
                 for(i = 0; i < com; i++) {
                     pid = fork();
@@ -159,40 +185,55 @@ int main (){
                     }
                     else
                     {
-                        hijos[i] = pid;  //guardo el pid del hijo
+                        hijos2Mandatos[i] = pid;  //guardo el pid del hijo
                     }
                 }
 
 
-                //Bucle para esperar que terminen los hijos
+                //Bucle para esperar que terminen los hijos2Mandatos
                 for(i = 0; i < com; i++)
                 {
-                    kill(hijos[i], SIGUSR2);
-                    close(pipe2Man[0]);
-                    close(pipe2Man[1]);
+                    kill(hijos2Mandatos[i], SIGUSR2);
+                    close(pipe2Mandatos[0]);
+                    close(pipe2Mandatos[1]);
                     wait(NULL);
                 }
 //                printf("Todos los hijos terminaron\n");
 
             }
-            printf("msh > ");
+
+
+                /*****************************************************************************************************************/
+                /******************************* Si tienen más de dos mandatos y redirecciones: **********************************/
+                /*****************************************************************************************************************/
+
+            else if(line->ncommands > 2) {
+                // Creamos los arrays dinamicos
+                pipes = (tPipe *)calloc(line->ncommands-1,sizeof(tPipe));
+                hijos = (int *)calloc(line->ncommands, sizeof(int));
+            }
+
+            directorio = getcwd(cwd, sizeof(cwd));
+            printf("msh (%s)> ", directorio);
             continue;
         } // Termina el else de clasificar la entrada por n.º de argumentos
 
     }
+    free(hijos);
+    free(pipes);
     return 0;
 }
 
-void manejador_hijo()
+void manejador_hijo2Mandatos()
 {
     if (i == 0){
         // Redireccionamos para que escriba en el pipe y no en pantalla:
-        dup2(pipe2Man[1], 1);
-        close(pipe2Man[0]);
+        dup2(pipe2Mandatos[1], 1);
+        close(pipe2Mandatos[0]);
     } else if (i==1){
         // Redireccionamos para que lea del pipe y no de pantalla:
-        dup2(pipe2Man[0], 0);
-        close(pipe2Man[1]);
+        dup2(pipe2Mandatos[0], 0);
+        close(pipe2Mandatos[1]);
     }
 
     execvp(line->commands[i].argv[0], line->commands[i].argv);
