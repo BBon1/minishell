@@ -10,44 +10,115 @@
 #include <fcntl.h>
 
 //  VARIABLES GLOBALES
-pid_t * hijos = (pid_t*)calloc (5, sizeof(pid_t));  // Array dinamico de pids
-tub * tube = (tub *)calloc(4, sizeof(tub)); // Array dinámico de los pipes
+pid_t * hijos; // Array dinamico de pids
+tub * tube; // Array dinámico de los pipes
 tline * line; // Array dinamico de tlines
 int m; // Variable para indicar que mandato toca ejecutar
 
+
+
 void manejador_mandatos ();
+
+
 
 int main() {
 	// Poner todas las declaraciones de variables locales al principio del main (o funciones)
 	char buf[1024];
-	char check_exit [] = "exit\n";
 	pid_t pid;	
-	int i; // Variable local para los for
+	int i; // Variable local para los bucles for
+	hijos = (pid_t*)calloc (5, sizeof(pid_t));  // inicializar lista dinamica
+	tube = (tub *)calloc(4, sizeof(tub)); // inicializar lista dinamica
+	trabajo * jobs_array = (trabajo*)calloc (10, sizeof(trabajo));  // inicializar lista dinamica
+	trabajo auxJ; // Variable auxiliar para los jobs
+	char s [200]; // Variable auxiliar
+	int j = 0; // Contador de jobs
+	char * token;
+	int pid_valido = 0;
+	int auxT;
+	
 	
 	signal(SIGUSR1, manejador_mandatos); // Minishell llama al manejador para ejecutar mandatos
 	signal(2 ,SIG_IGN);  // Mini shell ignora Ctrl+C
 	
-	printf("miniShell ==> Empezando minishell \nminiShell ==> ");	
+	
+	fprintf(stdout,"miniShell ==> Empezando minishell \nminiShell ==> ");	
+	
 	while (fgets(buf, 1024, stdin)) {  // MINISHELL
 	
-		if (strcmp(check_exit, buf) == 0){ // Escribir exit para poder salir de la minishell
-			printf("Saliendo de la minishell...\n");
-			// Liberar memoria dinamica...
+		// Comprobaciones del contenido del buffer
+		if (strcmp("exit\n", buf) == 0){ // Escribir exit para poder salir de la minishell
+			fprintf(stdout,"Saliendo de la minishell...\n");
+			// Liberar memoria dinamica
 			free(tube);
 			free(hijos); 
+			free(jobs_array);
+			// Matar a los procesos que aún no han terminado
+			
 			return 0;
 			
-		} else if (strcmp("\n", buf) == 0){ // Escribir exit para poder salir de la minishell
-			printf("miniShell ==> ");
+			
+		} else if (strcmp("\n", buf) == 0){ // No escribir nada 
+			fprintf(stdout,"miniShell ==> ");
+			continue;
+			
+			
+		} else if (strcmp("jobs\n", buf) == 0){
+			
+			for (i = 0 ; i < j; i++ ){
+				 
+				if (jobs_array[i].pid == waitpid(jobs_array[i].pid, NULL , WNOHANG)){  
+				// Ha terminado por su cuenta
+					if (WEXITSTATUS(jobs_array[i].status) == 0){
+						strcpy(s, "Done");
+					}
+				} else if (waitpid(jobs_array[i].pid, NULL , WNOHANG) == -1) { // Terminado con error
+						strcpy(s, "Error"); 
+				} else { // No ha terminado
+					if (WIFSTOPPED(jobs_array[i].status)){
+						strcpy(s, "Stopped");
+					} else if (WIFSIGNALED(jobs_array[i].status)){
+						strcpy(s, "Signaled");
+					} else {
+						strcpy(s, "Running");
+					}
+				}
+				
+				fprintf(stdout,"[%d] %s       %s", i+1 , s, jobs_array[i].name);
+			}
+			
+			fprintf(stdout,"miniShell ==> ");
+			continue;
+			
+			
+		} if (strstr(buf, "fg") != NULL){
+			token = strtok(buf, " ");  // Quitar el fg
+			token = strtok(NULL, " "); // PID
+			auxT = atoi(token);
+			// Comprobrar si el pid esta en jobs
+			for (i = 0; i < j; i++){
+				if (auxT == jobs_array[i].pid){
+					pid_valido = 1;
+				}
+			}
+			if (pid_valido){
+				fprintf(stdout,"Pasando el proceso %d a primer plano\n", auxT);
+				waitpid(auxT , NULL , 0);
+			} else {
+				fprintf(stderr, "El PID pasado no es válido\n");
+			}
+			pid_valido = 0;
+			fprintf(stdout,"miniShell ==> ");
 			continue;
 		}
+		
 		
 		line = tokenize(buf);  // GET mandatos
 		
 		if (line==NULL) {
-			printf("Ha surgido un error al reservar espacio en memoria\n");
+			fprintf(stderr,"Ha surgido un error al reservar espacio en memoria\n");
 			continue;
 		}
+		
 		
 		// Redimensionar si fuera necesario
 		if (line->ncommands > 5){
@@ -59,6 +130,13 @@ int main() {
 				tube = (tub *)calloc(line->ncommands-1, sizeof(tub)); // Array dinámico de los pipes
 			}
 		}
+		if (j > 10){
+			jobs_array = realloc(jobs_array, (j*2) * sizeof(trabajo));
+			if (jobs_array == NULL ){
+				fprintf(stderr,"Ha surgido un error al reservar espacio en memoria, no caben más procesos en 2º plano\n");
+			}
+		}
+		
 		
 		// Crear los pipes
 		for (i = 0; i < line->ncommands-1; i++){ // crear los pipes antes de que crear los hijos
@@ -77,13 +155,15 @@ int main() {
 			}
 		}
 		
-		// Despertar al último hijos que será el ultimo mandato 
-		kill(hijos[line->ncommands-1], SIGUSR1);
-		
 		// Cerrar los pipes en la minishell
 		for (i = 0; i < line->ncommands-1; i++){
 			close (tube[i].tuberia[1]); 
 			close (tube[i].tuberia[0]); 
+		}
+		
+		// Despertar a todos los mandatos
+		for (m = 0 ; m < line->ncommands; m ++){ 
+			kill(hijos[m], SIGUSR1); 
 		}
 		
 		// La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
@@ -91,12 +171,18 @@ int main() {
 			signal(2 ,SIG_IGN); // El padre no muere
 			waitpid(hijos[line->ncommands-1], NULL, 0);
 		} else {
-			waitpid(hijos[line->ncommands-1], NULL, WNOHANG);
+			waitpid(hijos[line->ncommands-1], &auxJ.status , WNOHANG);
+			auxJ.pid = hijos[line->ncommands-1]; 
+			strcpy(auxJ.name, buf);
+			jobs_array[j] = auxJ;
+			j++;		
+			fprintf(stdout, "[%d] %d\n", j, jobs_array[j-1].pid);	
 		}
+		
 		
 			
 		// Siguiente
-		printf("miniShell ==> ");	
+		fprintf(stdout,"miniShell ==> ");	
 	}
 	return 0;
 }
@@ -122,8 +208,7 @@ void manejador_mandatos (){
 			dup2(file_error,2);
 		}
 
-		// Despertar al resto de hijos
-		kill(hijos[m-1], SIGUSR1); 
+		
 		
 		// Cerrar los pipes sobrantes después de haber despertado al resto de hijos
 		for (i = 0; i < m-1; i++){
@@ -133,9 +218,13 @@ void manejador_mandatos (){
 		close (tube[m-1].tuberia[1]); 
 		
 		// Ejecutar mandato
-		execvp(line->commands[m].filename , line->commands[m].argv);
-		fprintf(stderr, "Error al ejecutar el programa\n");
-		exit(1);
+		if (execvp(line->commands[m].filename , line->commands[m].argv) == -1){
+			printf("%s: No se ha encontrado dicho comando\n", line->commands[m].filename);
+			fprintf(stderr, "Error al ejecutar el programa\n");
+			exit(1);
+		}
+		
+		
 		
 	}else if ( line->ncommands != 1 && m > 0){ //Mandato intermedios Hijo - (m,0)
 		
@@ -143,9 +232,6 @@ void manejador_mandatos (){
 		dup2(tube[m-1].tuberia[0], 0); // pipe lectura -> stdin
 		dup2(tube[m].tuberia[1], 1); //  pipe salida -> stdout
 
-		// Despertar al resto de hijos
-		kill(hijos[m-1], SIGUSR1); 
-		
 		// Cerrar los pipes sobrantes después de haber despertado al resto de hijos
 		for (i = 0; i < m-1; i++){
 			close (tube[i].tuberia[1]); 
@@ -159,9 +245,12 @@ void manejador_mandatos (){
 		close (tube[m].tuberia[0]);
 		
 		// Ejecutar mandato
-		execvp(line->commands[m].filename , line->commands[m].argv);
-		fprintf(stderr, "Error al ejecutar el programa\n");
-		exit(1);
+		if (execvp(line->commands[m].filename , line->commands[m].argv) == -1){
+			printf("%s: No se ha encontrado dicho comando\n", line->commands[m].filename);
+			fprintf(stderr, "Error al ejecutar el programa\n");
+			exit(1);
+		}
+		
 		
 	} else { // Primer hijo, primer mandato - Hijo 0 / Un solo hijo
 		
@@ -194,9 +283,11 @@ void manejador_mandatos (){
 		}
 		
 		// Ejecutar mandato
-		execvp(line->commands[m].filename , line->commands[m].argv);
-		fprintf(stderr, "Error al ejecutar el programa\n");
-		exit(1);
+		if (execvp(line->commands[m].filename , line->commands[m].argv) == -1){
+			printf("%s: No se ha encontrado dicho comando\n", line->commands[m].filename);
+			fprintf(stderr, "Error al ejecutar el programa\n");
+			exit(1);
+		}
 	}	
 		
 }
