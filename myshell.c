@@ -185,7 +185,6 @@ int main (){
     // Liberamos la memoria de los arrays dinámicos usados previamente:
     free(hijos);
     free(pipes);
-    free(backG);
     return 0;
 }
 
