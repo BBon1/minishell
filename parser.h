@@ -1,4 +1,5 @@
 
+
 typedef struct {
 	char * filename;
 	int argc;
@@ -14,9 +15,20 @@ typedef struct {
 	int background;
 } tline;
 
+
 typedef struct {
-	int tuberia [2];
+	int tuberia[2];
 } tub;
 
-extern tline * tokenize(char *str);
 
+typedef struct {
+	int index;
+	int pid;
+	int status;
+	char name[100];
+	int view;
+} trabajo;
+
+
+
+extern tline * tokenize(char *str);
