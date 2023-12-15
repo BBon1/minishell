@@ -18,26 +18,27 @@ int m; // Variable para indicar que mandato toca ejecutar
 
 
 void manejador_mandatos ();
-
+void primer_plano();
 
 
 int main() {
 	// Poner todas las declaraciones de variables locales al principio del main (o funciones)
 	char buf[1024];
 	pid_t pid;	
-	int i; // Variable local para los bucles for
+	int i, p; // Variable local para los bucles for
 	hijos = (pid_t*)calloc (5, sizeof(pid_t));  // inicializar lista dinamica
 	tube = (tub *)calloc(4, sizeof(tub)); // inicializar lista dinamica
 	trabajo * jobs_array = (trabajo*)calloc (10, sizeof(trabajo));  // inicializar lista dinamica
 	trabajo auxJ; // Variable auxiliar para los jobs
 	char s [200]; // Variable auxiliar
-	int j = 0; // Contador de jobs
+	int j = 1; // Contador de jobs
 	char * token;
 	int pid_valido = 0;
 	int auxT;
 	
 	
 	signal(SIGUSR1, manejador_mandatos); // Minishell llama al manejador para ejecutar mandatos
+	signal(SIGUSR2, primer_plano);
 	signal(2 ,SIG_IGN);  // Mini shell ignora Ctrl+C
 	
 	
@@ -48,11 +49,17 @@ int main() {
 		// Comprobaciones del contenido del buffer
 		if (strcmp("exit\n", buf) == 0){ // Escribir exit para poder salir de la minishell
 			fprintf(stdout,"Saliendo de la minishell...\n");
+			
+			// Matar a los procesos que aún no han terminado
+			for (i = 1; i < j; i++ ){
+				if (waitpid(jobs_array[i].pid, NULL , WNOHANG) == 0){
+					kill(9, jobs_array[i].pid);
+				}
+			}
 			// Liberar memoria dinamica
 			free(tube);
 			free(hijos); 
 			free(jobs_array);
-			// Matar a los procesos que aún no han terminado
 			
 			return 0;
 			
@@ -64,12 +71,13 @@ int main() {
 			
 		} else if (strcmp("jobs\n", buf) == 0){
 			
-			for (i = 0 ; i < j; i++ ){
+			for (i = 1; i < j; i++ ){
 				 
 				if (jobs_array[i].pid == waitpid(jobs_array[i].pid, NULL , WNOHANG)){  
 				// Ha terminado por su cuenta
 					if (WEXITSTATUS(jobs_array[i].status) == 0){
 						strcpy(s, "Done");
+						jobs_array[i].view = 1;
 					}
 				} else if (waitpid(jobs_array[i].pid, NULL , WNOHANG) == -1) { // Terminado con error
 						strcpy(s, "Error"); 
@@ -82,26 +90,60 @@ int main() {
 						strcpy(s, "Running");
 					}
 				}
+				// Limpiar los mandatos en jobs que hayan terminado
+				if (jobs_array[i].view){ // Si se ha visto una vez, eliminar
+					for (p = i; p < j-1; p++){
+						jobs_array[p] = jobs_array[p+1];
+					}
+					j --;
+				}
 				
-				fprintf(stdout,"[%d] %s       %s", i+1 , s, jobs_array[i].name);
+				fprintf(stdout,"[%d] %s       %s", jobs_array[i].index , s, jobs_array[i].name);
 			}
 			
 			fprintf(stdout,"miniShell ==> ");
 			continue;
 			
 			
-		} if (strstr(buf, "fg") != NULL){
+		} else if (strcmp("fg\n", buf) == 0){ // Solo fg
+		
+			if (j > 1){
+				auxT = jobs_array[1].pid;
+				// Primer mandato en bg pasa a fg
+				for (i = 1; i < j-1; i++){
+					jobs_array[i] = jobs_array[i+1];
+				}
+				j--;
+				fprintf(stdout,"Pasando el proceso %d a primer plano\n", auxT);
+				//Que pueda morir el mandato pasado a primer plano
+				kill(auxT, SIGUSR2);
+				waitpid(auxT , NULL , 0);
+			} else {
+				fprintf(stderr, "No hay ningún mandato en segundo plano\n");
+			}
+			fprintf(stdout,"miniShell ==> ");
+			continue;
+			
+		} else if (strstr(buf, "fg") != NULL){
 			token = strtok(buf, " ");  // Quitar el fg
 			token = strtok(NULL, " "); // PID
 			auxT = atoi(token);
+			
 			// Comprobrar si el pid esta en jobs
-			for (i = 0; i < j; i++){
+			for (i = 1; i < j; i++){
 				if (auxT == jobs_array[i].pid){
 					pid_valido = 1;
+					// Si está, actualizar la lista dinámica de jobs
+					for (p = i; p < j-1; p++){
+						jobs_array[p] = jobs_array[p+1];
+					}
+					j --;
 				}
 			}
 			if (pid_valido){
 				fprintf(stdout,"Pasando el proceso %d a primer plano\n", auxT);
+				//Que pueda morir el mandato pasado a primer plano
+				kill(auxT, SIGUSR2);
 				waitpid(auxT , NULL , 0);
 			} else {
 				fprintf(stderr, "El PID pasado no es válido\n");
@@ -173,10 +215,12 @@ int main() {
 		} else {
 			waitpid(hijos[line->ncommands-1], &auxJ.status , WNOHANG);
 			auxJ.pid = hijos[line->ncommands-1]; 
+			auxJ.index=j;
+			auxJ.view = 0;
 			strcpy(auxJ.name, buf);
-			jobs_array[j] = auxJ;
-			j++;		
-			fprintf(stdout, "[%d] %d\n", j, jobs_array[j-1].pid);	
+			jobs_array[j] = auxJ;	
+			fprintf(stdout, "[%d] %d\n", j, jobs_array[j].pid);	
+			j++;
 		}
 		
 		
@@ -290,4 +334,9 @@ void manejador_mandatos (){
 		}
 	}	
 		
+}
+
+void primer_plano(){
+	signal(2 ,SIG_DFL);
+	return;
 }
