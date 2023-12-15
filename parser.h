@@ -14,5 +14,17 @@ typedef struct {
 	int background;
 } tline;
 
+typedef struct {
+	int tuberia[2];
+} tPipe;
+
+typedef struct {
+	int index;
+	int pid;
+	int status;
+	char name[100];
+	int view;  // 'Booleano' Saber si eliminar de la lista
+} tJob;
+
 extern tline * tokenize(char *str);
 
