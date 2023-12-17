@@ -13,10 +13,10 @@
 
 
 void initJobs(jobList * nuevaLista){
-    nuevaLista.contador = 1;
-    nuevaLista.index = 0;
-    nuevaLista.maximo = 10;
-    nuevaLista.listaJobs = (tJob*)calloc (10, sizeof(tJob));
+    nuevaLista->contador = 1;
+    nuevaLista->index = 0;
+    nuevaLista->maximo = 10;
+    nuevaLista->listaJobs = (tJob*)calloc (10, sizeof(tJob));
     nuevaLista->listaJobs->pids = (pid_t *)calloc (5, sizeof(pid_t));
 }
 
@@ -39,13 +39,13 @@ void initJobNoStatus(tJob * nuevo ,int in, pid_t last, pid_t * listaPids, char *
 }
 
 int isFull(jobList * lista){
-    return lista.index == lista.maximo;
+    return lista->index == lista.maximo;
 }
 
 
 void reallocJobs(jobList * lista){
-    lista.listaJobs = realloc(lista.listaJobs, (lista.maximo*2) * sizeof(tJob));
-    if (lista.listaJobs == NULL ){
+    lista->listaJobs = realloc(lista.listaJobs, (lista.maximo*2) * sizeof(tJob));
+    if (lista->listaJobs == NULL ){
         fprintf(stderr,"Ha surgido un error al reservar espacio en memoria\n");
     }
     lista->maximo *= 2;
@@ -55,27 +55,27 @@ void printJobs(jobList * lista){
     int i ;
     char s [200]; // Variable auxiliar
 
-    for (i = 0; i < lista.index; i++ ){
+    for (i = 0; i < lista->index; i++ ){
 
-        if (lista.listaJobs[i].lastPid == waitpid(lista.listaJobs[i].lastPid, NULL , WNOHANG)){
+        if (lista->listaJobs[i].lastPid == waitpid(lista->listaJobs[i].lastPid, NULL , WNOHANG)){
             // Ha terminado por su cuenta
-            if (WEXITSTATUS(lista.listaJobs[i].status) == 0){
+            if (WEXITSTATUS(lista->listaJobs[i].status) == 0){
                 strcpy(s, "Done");
-                lista.listaJobs[i].delete = 1;
+                lista->listaJobs[i].delete = 1;
             }
-        } else if (waitpid(lista.listaJobs[i].lastPid, NULL , WNOHANG) == -1) { // Terminado con error
+        } else if (waitpid(lista->listaJobs[i].lastPid, NULL , WNOHANG) == -1) { // Terminado con error
             strcpy(s, "Error");
         } else { // No ha terminado == 0
-            if (WIFSTOPPED(lista.listaJobs[i].status)){
+            if (WIFSTOPPED(lista->listaJobs[i].status)){
                 strcpy(s, "Stopped");
-            } else if (WIFSIGNALED(lista.listaJobs[i].status)){
+            } else if (WIFSIGNALED(lista->listaJobs[i].status)){
                 strcpy(s, "Signaled");
             } else {
                 strcpy(s, "Running");
             }
         }
 
-        fprintf(stdout,"[%d] %s       %s", lista.listaJobs[i].index , s, lista.listaJobs[i].name);
+        fprintf(stdout,"[%d] %s       %s", lista->listaJobs[i].index , s, lista->listaJobs[i].name);
     }
     // Limpiar los mandatos que hayan terminado y ya hayamos visto una vez
     update(lista);
@@ -91,8 +91,8 @@ void update(jobList * lista){
     int i ;
     int eliminados = 0;
     for (i = 0; i < lista->index; i++) {
-        if (lista.listaJobs[i].delete) {
-            lista.listaJobs[i] == NULL;
+        if (lista->listaJobs[i].delete) {
+            lista->listaJobs[i] == NULL;
             eliminados ++;
             move(lista, i);
         }
@@ -102,20 +102,20 @@ void update(jobList * lista){
 
 void move(jobList * lista, int i){
     for (i; i < lista->index; i++){
-        lista.listaJobs[i] = lista.listaJobs[i+1]
+        lista->listaJobs[i] = lista->listaJobs[i+1]
     }
 }
 
 void freeJobs(jobList * lista){
     free(lista->listaJobs->pids);
-    free(lista.listaJobs);
+    free(lista->listaJobs);
     free(lista);
 }
 
 int isIn(pid_t pid, jobList* lista){
     int i;
     for (i = 0; i < lista.maximo; i++){
-        if (pid == lista.listaJobs[i].lastPid){
+        if (pid == lista->listaJobs[i].lastPid){
             return 1;
         }
     }
@@ -156,7 +156,7 @@ pid_t * killPids(jobList * lista, int i){
 }
 
 pid_t * getPids(tJob * job){
-    return job.pids;
+    return job->pids;
 }
 
 int getIndex(jobList * lista){
