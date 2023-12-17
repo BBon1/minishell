@@ -3,7 +3,6 @@
 #include <unistd.h>
 
 
-
 typedef struct {
     int index;
     pid_t lastPid;
@@ -38,3 +37,4 @@ tJob * getJobByPid(pid_t pid, jobList * lista);
 pid_t * killPids(jobList * lista, int i);
 pid_t * getPids(tJob * job);
 int getIndex(jobList * lista);
+pid_t getLastPid(tJob* job);
