@@ -15,8 +15,8 @@
 tline * line; // Array dinamico de tlines
 tPipe * pipes; // Array dinámico de los pipes
 pid_t * hijos; // Array dinamico de pids de los hijos
-jobList * fgList;  // Array dinamico para procesos en fg
-jobList * bgList;  // Array dinamico de procesos en bg
+jobList fgList;  // Array dinamico para procesos en fg
+jobList bgList;  // Array dinamico de procesos en bg
 int mandato; // Variable para indicar que mandato toca ejecutar
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -33,14 +33,16 @@ int main (){
     pid_t pid;
     int i, p; // Variable local para los bucles for
     int status;
-    tJob * auxJ; // Variable auxiliar para los jobs
-    tJob * auxJ2;
+    tJob auxJ; // Variable auxiliar para los jobs
+    tJob auxJ2 ;
+    pid_t k [5]; // Variable auxiliar para matar a los procesos restantes
     // Averiguamos el directorio en el que estamos trabajando
     char cwd[1024];
     const char * directorio = getcwd(cwd, sizeof(cwd));
     // Inicializar listas dinámicas
     hijos = (pid_t *)calloc (5, sizeof(pid_t));
     pipes = (tPipe *)calloc(4, sizeof(tPipe));
+    // Inicializar las listas de foreground y background
     initJobs(fgList);
     initJobs(bgList);
 
@@ -48,10 +50,10 @@ int main (){
     signal(2 , manejador_C); // CTRL + C
     signal(SIGUSR1, manejador_hijos);
 
-    // COMIENZA LA MYSHELL ///////////////////////////////////////////////////
-    fprintf(stdout, "msh (%s)> ", directorio);
+    // INICIA LA MYSHELL ////////////////////////////////////////////////////////
+    fprintf(stdout, "msh %s)> ", directorio);
     while (fgets(buf, 1024, stdin)) {
-
+	
         // Si la línea no contiene nada directamente ejecutamos de nuevo el prompt:
         if (strcmp("\n", buf) == 0) {
             fprintf(stdout,"msh %s)> ", directorio);
@@ -59,55 +61,50 @@ int main (){
         }
 
         line = tokenize(buf);
-
+	
         if (line==NULL) {
             fprintf(stderr,"Ha surgido un error al reservar espacio en memoria\n");
             continue;
-        } else if (strcmp("exit\n", line->commands[0].argv[0]) == 0){
+        } else if (strcmp("exit", line->commands[0].argv[0]) == 0){
             fprintf(stdout,"Saliendo de msh...\n");
             // Matar a los procesos que aún no han terminado
             for (i = getIndex(fgList); i > 0; i--){
-                hijos = killPids(fgList, i);
-                p = 0;
-                while (hijos[p] > 0){
-                    kill(9, hijos[p]);
-                    p++;
-                }
+            	killPids(fgList, k, i);
+                for (i = 0; i < 5; i++){ 
+                	kill(2, k[i]);
+		}
             }
             for (i = getIndex(bgList); i > 0; i--){
-                hijos = killPids(bgList, i);
-                p = 0;
-                while (hijos[p] > 0){
-                    kill(9, hijos[p]);
-                    p++;
-                }
-            }
-
+                killPids(bgList, k, i);
+                for (i = 0; i < 5; i++){ 
+                	kill(2, k[i]);
+		}
+	    }
+	    
             // Liberar memoria dinamica
             free(pipes);
             free(hijos);
-            freeJobs(fgList);
-            freeJobs(bgList);
+            
             return 0;
 
 
         } else if (strcmp(line->commands[0].argv[0], "cd") == 0) {  // Comprobamos si es el mandato cd:
             cd();
 
-        } else if ( strcmp("jobs\n", line->commands[0].argv[0]) == 0){ // jobs
+        } else if ( strcmp("jobs", line->commands[0].argv[0]) == 0){ // jobs
                 printJobs(bgList);
                 fprintf(stdout, "msh (%s)> ", directorio);
             continue;
 
-        } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){ // fg
+        } else if (strcmp("fg", line->commands[0].argv[0]) == 0){ // fg
             if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
                 auxJ2 = getFirstJob(bgList);
-                if (auxJ2 != NULL){
+                if (getIndexJob(auxJ2) != -1){
                     addJob(auxJ2, fgList);
                     deleteJob(auxJ2, bgList);
                     pid = getLastPid(auxJ2);
-                    waitpid(pid, NULL, 0);
                     fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
+                    waitpid(pid, NULL, 0);
                 } else {
                     fprintf(stdout,"No hay procesos en segundo plano\n");
                 }
@@ -139,18 +136,13 @@ int main (){
                 pipes = (tPipe *)calloc(line->ncommands-1, sizeof(tPipe)); // Array dinámico de los pipes
             }
         }
-        if (isFull(fgList)){
-            reallocJobs(fgList);
-        } else if (isFull(bgList)){
-            reallocJobs(bgList);
-        }
 
         // Crear los pipes  /////////////////////////////////////////////////////////////////////////////
         for (i = 0; i < line->ncommands-1; i++){ // crear los pipes antes de que crear los hijos
             pipe(pipes[i].tuberia);
         }
 
-        //Crear un hijo para cada mandato	 /////////////////////////////////////////////////////////////
+        //Crear un hijo para cada mandato  /////////////////////////////////////////////////////////////
         for (i = 0 ; i < line->ncommands; i ++){
             pid = fork();
             if (pid == 0){
@@ -180,7 +172,7 @@ int main (){
             waitpid(hijos[line->ncommands-1], &status , WNOHANG);
             initJob(auxJ, getContador(bgList), hijos[line->ncommands-1], hijos, status , buf  );
             addJob(auxJ, bgList);
-            fprintf(stdout, "[%d] %d\n", getContador(bgList), hijos[line->ncommands-1]);
+            fprintf(stdout, "[%d] %d\n", getIndexJob(auxJ), getLastPid(auxJ));
         }
 
         directorio = getcwd(cwd, sizeof(cwd));
@@ -295,23 +287,22 @@ void manejador_hijos (){
 
 //// CTRL+C PARA PROCESOS EN FG //////////////////////////////////////////////////////////////
 void manejador_C(){
-    pid_t * auxP = (pid_t *)calloc (5, sizeof(pid_t));
-    tJob * auxJ ;
+    pid_t auxP [5];
+    tJob auxJ ;
     int i = 0;
     auxJ = getFirstJob(fgList);
-    auxP = getPids(auxJ);
+    getPids(auxJ, auxP);
     deleteJob(auxJ, fgList);
-    while (auxP[i] > 0){
-        kill(2, auxP[i]);
-        i++;
+    for (i = 0; i < 5; i++){ 
+    	kill(2, auxP[i]);
     }
+    
 }
 
 //// FUNCION CD /////////////////////////////////////////////////////////////////////////
 void cd(){
+    const char *home_dir = getenv("HOME"); // Si no se proporciona un argumento, cambiar al directorio HOME
     if (line->commands[0].argv[1] == NULL) {
-        // Si no se proporciona un argumento, cambiar al directorio HOME
-        const char *home_dir = getenv("HOME");
         if (home_dir != NULL) {
             chdir(home_dir);
         } else {
@@ -324,3 +315,6 @@ void cd(){
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
