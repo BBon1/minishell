@@ -22,7 +22,7 @@ int mandato; // Variable para indicar que mandato toca ejecutar
 
 //// DECLARACIÓN DE FUNCIONES ////////////////////////////////////////////////////////////
 void manejador_hijos ();
-void manejador_C();
+void manejador_C(int sig);
 void cd();
 //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -47,17 +47,16 @@ int main (){
     bgList = initJobs();
     
     // SIGNAL
-    signal(2 , manejador_C); // CTRL + C
+    signal(SIGINT , manejador_C); // CTRL + C
     signal(SIGUSR1, manejador_hijos);
 
     // INICIA LA MYSHELL ////////////////////////////////////////////////////////
-    fprintf(stdout, "msh %s)> ", directorio);
+    fprintf(stdout, "msh (%s)> ", directorio);
     while (fgets(buf, 1024, stdin)) {
-	bgList = update(bgList);
-        fgList = updateFG(fgList);
+        fgList = clean(fgList);
         // Si la línea no contiene nada directamente ejecutamos de nuevo el prompt:
         if (strcmp("\n", buf) == 0) {
-            fprintf(stdout,"msh %s)> ", directorio);
+            fprintf(stdout,"msh (%s)> ", directorio);
             continue;
         }
 
@@ -95,13 +94,13 @@ int main (){
 
         } else if ( strcmp("jobs", line->commands[0].argv[0]) == 0){ 	// jobs 
                 printJobs(bgList);
+                bgList = clean(bgList);
                 fprintf(stdout, "msh (%s)> ", directorio);
             continue;
 
 
         } else if (strcmp("fg", line->commands[0].argv[0]) == 0){ 	// fg
-            bgList = update(bgList);
-            fgList = updateFG(fgList);
+            bgList = clean(bgList);
             if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
                 auxJ2 = getFirstJob(bgList);
                 if (getIndexJob(auxJ2) != -1){
@@ -292,18 +291,25 @@ void manejador_hijos (){
 }
 
 //// CTRL+C PARA PROCESOS EN FG //////////////////////////////////////////////////////////////
-void manejador_C(){
+void manejador_C(int sig){
+    signal(sig, SIG_IGN);
+    fprintf(stdout, "AAAAAAAAAAAAAAAAAAAAA\n");
+    printJobs(fgList);
     pid_t auxP [5];
-    tJob auxJ ;
-    int i = 0;
-    auxJ = getFirstJob(fgList);
-    getPids(auxJ, auxP);
-    fgList = deleteJob(auxJ, fgList);
-    if (getIndexJob(auxJ) != -1){ // No ha terminado
-    	for (i = 0; i < 5; i++){ 
-    		kill(2, auxP[i]);
-    	}
+    tJob trabajo ;
+    int i ;
+    if (getIndex(fgList) > 0){
+    	fgList = clean(fgList);
+	trabajo = getFirstJob(fgList);
+	getPids(trabajo, auxP);
+	fgList = deleteJob(trabajo, fgList);
+	if (waitpid(trabajo.lastPid, NULL , WNOHANG) == 0){ // No ha terminado
+		for (i = 0; i < 5; i++){ 
+	    		kill(2, auxP[i]);
+	    	}
+	 }
     }
+    
 }
 
 //// FUNCION CD /////////////////////////////////////////////////////////////////////////
