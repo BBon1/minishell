@@ -33,18 +33,17 @@ void initJobNoStatus(tJob * nuevo ,int in, pid_t last, pid_t * listaPids, char *
     nuevo->index = in;
     nuevo->lastPid = last;
     nuevo->pids = listaPids;
-    nuevo->status = NULL;
     strcpy(nuevo->name, n);
     nuevo->delete = 0;
 }
 
 int isFull(jobList * lista){
-    return lista->index == lista.maximo;
+    return lista->index == lista->maximo;
 }
 
 
 void reallocJobs(jobList * lista){
-    lista->listaJobs = realloc(lista.listaJobs, (lista.maximo*2) * sizeof(tJob));
+    lista->listaJobs = realloc(lista->listaJobs, (lista->maximo*2) * sizeof(tJob));
     if (lista->listaJobs == NULL ){
         fprintf(stderr,"Ha surgido un error al reservar espacio en memoria\n");
     }
@@ -92,7 +91,7 @@ void update(jobList * lista){
     int eliminados = 0;
     for (i = 0; i < lista->index; i++) {
         if (lista->listaJobs[i].delete) {
-            lista->listaJobs[i] == NULL;
+            &lista->listaJobs[i] == NULL;
             eliminados ++;
             move(lista, i);
         }
@@ -102,7 +101,7 @@ void update(jobList * lista){
 
 void move(jobList * lista, int i){
     for (i; i < lista->index; i++){
-        lista->listaJobs[i] = lista->listaJobs[i+1]
+        lista->listaJobs[i] = lista->listaJobs[i+1];
     }
 }
 
@@ -114,7 +113,7 @@ void freeJobs(jobList * lista){
 
 int isIn(pid_t pid, jobList* lista){
     int i;
-    for (i = 0; i < lista.maximo; i++){
+    for (i = 0; i < lista->maximo; i++){
         if (pid == lista->listaJobs[i].lastPid){
             return 1;
         }
@@ -127,13 +126,13 @@ int getContador(jobList * lista){
 }
 
 tJob * getFirstJob(jobList * lista){
-    return lista->listaJobs[0];
+    return &lista->listaJobs[0];
 }
 
 void deleteJob(tJob * job, jobList * lista){
     int i;
     for (i = 0; i < lista->index; i++ ){
-        if (job == lista->listaJobs[i]){
+        if (job == &lista->listaJobs[i]){
             lista->listaJobs[i].delete = 1;
         }
     }
@@ -144,7 +143,7 @@ tJob * getJobByPid(pid_t pid, jobList * lista){
     int i;
     for (i = 0; i < lista->index; i++ ){
         if (pid == lista->listaJobs[i].lastPid){
-            return lista->listaJobs[i];
+            return &lista->listaJobs[i];
         }
     }
     return NULL;
@@ -152,7 +151,7 @@ tJob * getJobByPid(pid_t pid, jobList * lista){
 
 pid_t * killPids(jobList * lista, int i){
     lista->listaJobs[i].delete = 1;
-    return lista->listaJobs[i]->pids;
+    return lista->listaJobs[i].pids;
 }
 
 pid_t * getPids(tJob * job){
@@ -161,4 +160,8 @@ pid_t * getPids(tJob * job){
 
 int getIndex(jobList * lista){
     return lista->index;
+}
+
+pid_t getLastPid(tJob* job){
+    return job->lastPid;
 }
