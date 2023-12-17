@@ -12,13 +12,16 @@
 #include <signal.h>
 
 
-void initJobs(jobList nuevaLista){
+jobList initJobs(){
+    jobList nuevaLista;
     nuevaLista.contador = 1;
     nuevaLista.index = 0;
     nuevaLista.maximo = 10;
+    return nuevaLista;
 }
 
-void initJob(tJob  nuevo ,int in, pid_t last, pid_t * listaPids, int st, char * n){
+tJob initJob(int in, pid_t last, pid_t * listaPids, int st, char * n){
+    tJob nuevo ;
     int i ;
     nuevo.index = in;
     nuevo.lastPid = last;
@@ -28,9 +31,11 @@ void initJob(tJob  nuevo ,int in, pid_t last, pid_t * listaPids, int st, char * 
     nuevo.status = st;
     strcpy(nuevo.name, n);
     nuevo.delete = 0;
+    return nuevo;
 }
 
-void initJobNoStatus(tJob  nuevo ,int in, pid_t last, pid_t * listaPids , char * n){
+tJob initJobNoStatus(int in, pid_t last, pid_t * listaPids , char * n){
+    tJob nuevo ;
     int i ;
     nuevo.index = in;
     nuevo.lastPid = last;
@@ -39,6 +44,7 @@ void initJobNoStatus(tJob  nuevo ,int in, pid_t last, pid_t * listaPids , char *
     }
     strcpy(nuevo.name, n);
     nuevo.delete = 0;
+    return nuevo;
 }
 
 int isFull(jobList lista){
@@ -51,7 +57,6 @@ void printJobs(jobList lista){
     char s [200]; // Variable auxiliar
 
     for (i = 0; i < lista.index; i++ ){
-
         if (lista.listaJobs[i].lastPid == waitpid(lista.listaJobs[i].lastPid, NULL , WNOHANG)){
             // Ha terminado por su cuenta
             if (WEXITSTATUS(lista.listaJobs[i].status) == 0){
@@ -76,29 +81,45 @@ void printJobs(jobList lista){
     update(lista);
 }
 
-void addJob(tJob newJob, jobList lista){
-    lista.listaJobs[lista.index] = newJob;
+jobList addJob(tJob newJob, jobList lista){
+    memcpy(&lista.listaJobs[lista.index], &newJob, sizeof(tJob));
     lista.contador ++;
     lista.index ++;
+    return lista;
 }
 
-void update(jobList lista){
+jobList update(jobList lista){
     int i ;
     int eliminados = 0;
     for (i = 0; i < lista.index; i++) {
         if (lista.listaJobs[i].delete) {
-            &lista.listaJobs[i] == NULL;
             eliminados ++;
             move(lista, i);
         }
     }
     lista.index -= eliminados;
+    return lista;
 }
 
-void move(jobList lista, int i){
-    for (i; i < lista.index; i++){
-        lista.listaJobs[i] = lista.listaJobs[i+1];
+jobList updateFG(jobList lista){
+    int i ;
+    int eliminados = 0;
+    for (i = 0; i < lista.index; i++) {
+        if ( waitpid(lista.listaJobs[i].lastPid, NULL , WNOHANG) != 0) {
+            eliminados ++;
+            move(lista, i);
+        }
     }
+    lista.index -= eliminados;
+    return lista;
+}
+
+jobList move(jobList lista, int i){
+    for (i; i < lista.index; i++){
+    	memcpy(&lista.listaJobs[i], &lista.listaJobs[i+1], sizeof(tJob));
+         
+    }
+    return lista;
 }
 
 int isIn(pid_t pid, jobList lista){
@@ -116,10 +137,12 @@ int getContador(jobList lista){
 }
 
 tJob getFirstJob(jobList lista){
-    return lista.listaJobs[0];
+    tJob aux = lista.listaJobs[0];
+    lista = move(lista, 0);
+    return aux;
 }
 
-void deleteJob(tJob job, jobList lista){
+jobList deleteJob(tJob job, jobList lista){
     int i;
     for (i = 0; i < lista.index; i++ ){
         if (job.index == lista.listaJobs[i].index){
@@ -127,6 +150,7 @@ void deleteJob(tJob job, jobList lista){
         }
     }
     update(lista);
+    return lista;
 }
 
 tJob getJobByPid(pid_t pid, jobList lista){
@@ -141,19 +165,21 @@ tJob getJobByPid(pid_t pid, jobList lista){
     return aux;
 }
 
-void killPids(jobList lista, pid_t pids [],int i){
+pid_t killPids(jobList lista, pid_t *pids ,int i){
     int o ;
     for (o = 0; o < 5; o++){
     	pids[o] = lista.listaJobs[i].pids[o];
     }
     lista.listaJobs[i].delete = 1;
+    return *pids;
 }
 
-void getPids(tJob job, pid_t pids []){
+pid_t getPids(tJob job, pid_t *pids ){
     int i ;
     for (i = 0; i < 5; i++){
     	pids[i] = job.pids[i];
     }
+    return *pids;
 }
 
 int getIndexJob(tJob job){
