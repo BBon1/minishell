@@ -1,5 +1,16 @@
-#include "job.h"
+#include "jobs.h"
 #include "parser.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>   // Libreria para los ficheros
+#include <errno.h>   // Errores
+#include <signal.h>
+
 
 void initJobs(jobList * nuevaLista){
     nuevaLista.contador = 1;
@@ -70,7 +81,7 @@ void printJobs(jobList * lista){
     update(lista);
 }
 
-void addJob(tJob newJob, jobList * lista){
+void addJob(tJob * newJob, jobList * lista){
     lista->listaJobs = newJob;
     lista->contador ++;
     lista->index ++;
@@ -101,7 +112,7 @@ void freeJobs(jobList * lista){
     free(lista);
 }
 
-int isIn(pit_t pid, jobList* lista){
+int isIn(pid_t pid, jobList* lista){
     int i;
     for (i = 0; i < lista.maximo; i++){
         if (pid == lista.listaJobs[i].lastPid){
@@ -119,7 +130,7 @@ tJob * getFirstJob(jobList * lista){
     return lista->listaJobs[0];
 }
 
-void deleteJob(tJob job, jobList * lista){
+void deleteJob(tJob * job, jobList * lista){
     int i;
     for (i = 0; i < lista->index; i++ ){
         if (job == lista->listaJobs[i]){
@@ -129,7 +140,7 @@ void deleteJob(tJob job, jobList * lista){
     update(lista);
 }
 
-tJob* getJobByPid(pid_t pid, jobList * lista){
+tJob * getJobByPid(pid_t pid, jobList * lista){
     int i;
     for (i = 0; i < lista->index; i++ ){
         if (pid == lista->listaJobs[i].lastPid){
@@ -144,7 +155,7 @@ pid_t * killPids(jobList * lista, int i){
     return lista->listaJobs[i]->pids;
 }
 
-pid_t * getPids(tJob job){
+pid_t * getPids(tJob * job){
     return job.pids;
 }
 
