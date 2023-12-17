@@ -27,7 +27,7 @@ int isFull(jobList lista);
 void printJobs(jobList lista);
 jobList addJob(tJob  newJob, jobList lista);
 jobList update(jobList lista);
-jobList updateFG(jobList lista);
+jobList clean(jobList lista);
 jobList deleteJob(tJob  job, jobList lista);
 // void freeJobs(jobList lista);
 tJob getFirstJob(jobList lista);
