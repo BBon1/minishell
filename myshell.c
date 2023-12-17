@@ -96,7 +96,7 @@ int main (){
 
         } else if ( strcmp("jobs\n", line->commands[0].argv[0]) == 0){ // jobs
                 printJobs(bgList);
-                fprintf(stdout,"miniShell ==> ");
+                fprintf(stdout, "msh (%s)> ", directorio);
             continue;
 
         } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){ // fg
@@ -112,9 +112,9 @@ int main (){
                     fprintf(stdout,"No hay procesos en segundo plano\n");
                 }
             } else { // Se ha dado un pid
-            	p = isIn( (int)line->commands[0].argv[1], bgList); // Comprobar pid
+            	p = isIn( (int)&line->commands[0].argv[1], bgList); // Comprobar pid
                 if (p){ 
-                    pid = (int)line->commands[0].argv[1] ;
+                    pid = (int)&line->commands[0].argv[1] ;
                     fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
                     auxJ2 = getJobByPid(pid, bgList);
                     addJob(auxJ2, fgList);
@@ -124,7 +124,7 @@ int main (){
                     fprintf(stderr, "El PID pasado no es válido\n");
                 }
             }
-            fprintf(stdout,"msh ==> ");
+            fprintf(stdout, "msh (%s)> ", directorio);
             continue;
         }
 
@@ -293,6 +293,7 @@ void manejador_hijos (){
 
 }
 
+//// CTRL+C PARA PROCESOS EN FG //////////////////////////////////////////////////////////////
 void manejador_C(){
     pid_t * auxP = (pid_t *)calloc (5, sizeof(pid_t));
     tJob * auxJ ;
