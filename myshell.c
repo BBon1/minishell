@@ -32,6 +32,7 @@ int main (){
     char buf[1024];
     pid_t pid;
     int i; // Variable local para los bucles for
+    int status;
     tJob auxJ; // Variable auxiliar para los jobs
     // Averiguamos el directorio en el que estamos trabajando
     char cwd[1024];
@@ -43,7 +44,7 @@ int main (){
     initJobs(bgList);
 
     // SIGNAL
-    signal(2 , manejador_C); // Myshell ignora el ctr+c
+    signal(2 , manejador_C); // CTRL + C
     signal(SIGUSR1, manejador_hijos);
 
     // COMIENZA LA MYSHELL ///////////////////////////////////////////////////
@@ -64,7 +65,10 @@ int main (){
         } else if (strcmp("exit\n", line->commands[0].argv[0]) == 0){
             fprintf(stdout,"Saliendo de msh...\n");
             // Matar a los procesos que aún no han terminado
-            // kill(9, ldJobs[i].pid);
+            for (i = getIndex(fgList); i > 0; i--){
+
+                // kill(9, ldJobs[i].pid);
+            }
 
             // Liberar memoria dinamica
             free(pipes);
@@ -84,39 +88,30 @@ int main (){
 
         } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){ // fg
             if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
-
-
+                job = getFirstJob(bgList);
+                if (job != NULL){
+                    addJob(job, fgList);
+                    deleteJob(job, bgList);
+                    waitpid(getLastPid(job), NULL, 0);
+                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", getLastPid(job));
+                } else {
+                    fprintf(stdout,"No hay procesos en segundo plano\n");
+                }
             } else { // Se ha dado un pid
                 if (isIn(line->commands[0].argv[1], bgList)){ // Comprobar pid
                     fprintf(stdout,"Pasando el proceso %d a primer plano\n", line->commands[0].argv[1]);
-                    addJob();
-                    deleteJob();
+                    job = getJobByPid(line->commands[0].argv[1], bgList);
+                    addJob(job, fgList);
+                    deleteJob(job, bgList);
                     waitpid(line->commands[0].argv[1] , NULL , 0);
                 } else {
                     fprintf(stderr, "El PID pasado no es válido\n");
                 }
             }
-            if (j > 1){
-                    auxT = ldJobs[1].pid;
-                    // Primer mandato en bg pasa a fg
-                    for (i = 1; i < j-1; i++){
-                        ldJobs[i] = ldJobs[i+1];
-                    }
-                    j--;
-                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", auxT);
-                    //Que pueda morir el mandato pasado a primer plano
-                    kill(auxT, SIGUSR2);
-                    waitpid(auxT , NULL , 0);
-            } else {
-                    fprintf(stderr, "No hay ningún mandato en segundo plano\n");
-            }
             fprintf(stdout,"msh ==> ");
             continue;
-
-
-            }
-
         }
+
 
         // Redimensionar si fuera necesario  /////////////////////////////////////////////////////////
         if (line->ncommands > 5){
@@ -153,25 +148,23 @@ int main (){
         for (i = 0; i < line->ncommands-1; i++){
             close (pipes[i].tuberia[1]);
             close (pipes[i].tuberia[0]);
-        } //////////////////////////////////////////////////////////////////////////////////////////////
+        }
 
         // Despertar a todos los mandatos  //////////////////////////////////////////////////////////////
         for (mandato = 0 ; mandato < line->ncommands; mandato  ++){
             kill(hijos[mandato], SIGUSR1);
-        } ///////////////////////////////////////////////////////////////////////////////////////////////
+        }
 
-        // La minishell solo espera bloqueada si se ejecuta en primer plano, y solo espera al ultimo mandato
+        // Distintición entre bg y fg
         if ( !(line->background) ){
+            initJobNoStatus(auxJ, getContador(fgList), hijos[line->ncommands-1], hijos , name  );
+            addJob(auxJ, fgList);
             waitpid(hijos[line->ncommands-1], NULL, 0);
         } else {
-            waitpid(hijos[line->ncommands-1], &auxJ.status , WNOHANG);
-            auxJ.pid = hijos[line->ncommands-1];
-            auxJ.index=j;
-            auxJ.view = 0;
-            strcpy(auxJ.name, buf);
-            ldJobs[j] = auxJ;
-            fprintf(stdout, "[%d] %d\n", j, ldJobs[j].pid);
-            j++;
+            waitpid(hijos[line->ncommands-1], &status , WNOHANG);
+            initJob(auxJ, getContador(bgList), hijos[line->ncommands-1], hijos, status , name  );
+            addJob(auxJ, bgList);
+            fprintf(stdout, "[%d] %d\n", getContador(bgList), hijos[line->ncommands-1]);
         }
 
         directorio = getcwd(cwd, sizeof(cwd));
@@ -286,6 +279,7 @@ void manejador_hijos (){
 
 void manejador_C(){
 
+    fgList
 }
 
 //// FUNCION CD /////////////////////////////////////////////////////////////////////////
