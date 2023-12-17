@@ -31,14 +31,14 @@ int main (){
     // VARIABLES  ////////////////////////////////////////////////////////////
     char buf[1024];
     pid_t pid;
-    int i; // Variable local para los bucles for
+    int i, p; // Variable local para los bucles for
     int status;
     tJob auxJ; // Variable auxiliar para los jobs
     // Averiguamos el directorio en el que estamos trabajando
     char cwd[1024];
     const char * directorio = getcwd(cwd, sizeof(cwd));
     // Inicializar listas dinámicas
-    hijos = (pid_t*)calloc (5, sizeof(pid_t));
+    hijos = (pid_t *)calloc (5, sizeof(pid_t));
     pipes = (tPipe *)calloc(4, sizeof(tPipe));
     initJobs(fgList);
     initJobs(bgList);
@@ -66,8 +66,20 @@ int main (){
             fprintf(stdout,"Saliendo de msh...\n");
             // Matar a los procesos que aún no han terminado
             for (i = getIndex(fgList); i > 0; i--){
-
-                // kill(9, ldJobs[i].pid);
+                hijos = getPids(fgList, i);
+                p = 0;
+                while (hijos[p] != NULL){
+                    kill(9, hijos[i]);
+                    p++;
+                }
+            }
+            for (i = getIndex(bgList); i > 0; i--){
+                hijos = getPids(bgList, i);
+                p = 0;
+                while (hijos[p] != NULL){
+                    kill(9, hijos[i]);
+                    p++;
+                }
             }
 
             // Liberar memoria dinamica
@@ -278,8 +290,16 @@ void manejador_hijos (){
 }
 
 void manejador_C(){
-
-    fgList
+    pid_t * auxP = (pid_t *)calloc (5, sizeof(pid_t));
+    tJob auxJ ;
+    int i = 0;
+    auxJ = getFirstJob(fgList);
+    auxP = getPids(auxJ);
+    deleteJob(auxJ, fgList);
+    while (auxP[i] != NULL){
+        kill(2, auxP[i]);
+        i++;
+    }
 }
 
 //// FUNCION CD /////////////////////////////////////////////////////////////////////////
