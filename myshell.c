@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "job.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,11 +15,14 @@
 tline * line; // Array dinamico de tlines
 tPipe * pipes; // Array dinámico de los pipes
 pid_t * hijos; // Array dinamico de pids de los hijos
+jobList * fgList;  // Array dinamico para procesos en fg
+jobList * bgList;  // Array dinamico de procesos en bg
 int mandato; // Variable para indicar que mandato toca ejecutar
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //// DECLARACIÓN DE FUNCIONES ////////////////////////////////////////////////////////////
 void manejador_hijos ();
+void manejador_C();
 void cd();
 //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -27,24 +31,19 @@ int main (){
     // VARIABLES  ////////////////////////////////////////////////////////////
     char buf[1024];
     pid_t pid;
+    int i; // Variable local para los bucles for
+    tJob auxJ; // Variable auxiliar para los jobs
     // Averiguamos el directorio en el que estamos trabajando
     char cwd[1024];
     const char * directorio = getcwd(cwd, sizeof(cwd));
     // Inicializar listas dinámicas
     hijos = (pid_t*)calloc (5, sizeof(pid_t));
     pipes = (tPipe *)calloc(4, sizeof(tPipe));
-    tJob * ldJobs = (tJob*)calloc (10, sizeof(tJob));
-    // Auxiliares
-    int i, p; // Variable local para los bucles for
-    tJob auxJ; // Variable auxiliar para los jobs
-    char s [200]; // Variable auxiliar
-    int j = 1; // Contador de jobs
-    char * token;
-    int pid_valido = 0;
-    int auxT;
+    initJobs(fgList);
+    initJobs(bgList);
 
     // SIGNAL
-    signal(2 ,SIG_IGN); // Myshell ignora el ctr+c
+    signal(2 , manejador_C); // Myshell ignora el ctr+c
     signal(SIGUSR1, manejador_hijos);
 
     // COMIENZA LA MYSHELL ///////////////////////////////////////////////////
@@ -70,50 +69,33 @@ int main (){
             // Liberar memoria dinamica
             free(pipes);
             free(hijos);
-            free(ldJobs);
+            freeJobs(fgList);
+            freeJobs(bgList);
             return 0;
 
 
         } else if (strcmp(line->commands[0].argv[0], "cd") == 0) {  // Comprobamos si es el mandato cd:
             cd();
 
-        } else if ( strcmp("jobs\n", line->commands[0].argv[0]) == 0){     ////////// JOBS y FG
-            for (i = 1; i < j; i++ ){
-
-                    if (ldJobs[i].pid == waitpid(ldJobs[i].pid, NULL , WNOHANG)){
-                        // Ha terminado por su cuenta
-                        if (WEXITSTATUS(ldJobs[i].status) == 0){
-                            strcpy(s, "Done");
-                            ldJobs[i].view = 1;
-                        }
-                    } else if (waitpid(ldJobs[i].pid, NULL , WNOHANG) == -1) { // Terminado con error
-                        strcpy(s, "Error");
-                    } else { // No ha terminado
-                        if (WIFSTOPPED(ldJobs[i].status)){
-                            strcpy(s, "Stopped");
-                        } else if (WIFSIGNALED(ldJobs[i].status)){
-                            strcpy(s, "Signaled");
-                        } else {
-                            strcpy(s, "Running");
-                        }
-                    }
-                    // Limpiar los mandatos en jobs que hayan terminado
-                    if (ldJobs[i].view){ // Si se ha visto una vez, eliminar
-                        for (p = i; p < j-1; p++){
-                            ldJobs[p] = ldJobs[p+1];
-                        }
-                        j --;
-                    }
-
-                    fprintf(stdout,"[%d] %s       %s", ldJobs[i].index , s, ldJobs[i].name);
-                }
-
+        } else if ( strcmp("jobs\n", line->commands[0].argv[0]) == 0){ // jobs
+                printJobs(bgList);
                 fprintf(stdout,"miniShell ==> ");
             continue;
 
+        } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){ // fg
+            if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
 
-        } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){
 
+            } else { // Se ha dado un pid
+                if (isIn(line->commands[0].argv[1], bgList)){ // Comprobar pid
+                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", line->commands[0].argv[1]);
+                    addJob();
+                    deleteJob();
+                    waitpid(line->commands[0].argv[1] , NULL , 0);
+                } else {
+                    fprintf(stderr, "El PID pasado no es válido\n");
+                }
+            }
             if (j > 1){
                     auxT = ldJobs[1].pid;
                     // Primer mandato en bg pasa a fg
@@ -128,31 +110,10 @@ int main (){
             } else {
                     fprintf(stderr, "No hay ningún mandato en segundo plano\n");
             }
-            fprintf(stdout,"miniShell ==> ");
+            fprintf(stdout,"msh ==> ");
             continue;
 
-            // Comprobrar si el pid esta en jobs
-                for (i = 1; i < j; i++){
-                    if (auxT == ldJobs[i].pid){
-                        pid_valido = 1;
-                        // Si está, actualizar la lista dinámica de jobs
-                        for (p = i; p < j-1; p++){
-                            ldJobs[p] = ldJobs[p+1];
-                        }
-                        j --;
-                    }
-                }
-                if (pid_valido){
-                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", auxT);
-                    //Que pueda morir el mandato pasado a primer plano
-                    kill(auxT, SIGUSR2);
-                    waitpid(auxT , NULL , 0);
-                } else {
-                    fprintf(stderr, "El PID pasado no es válido\n");
-                }
-                pid_valido = 0;
-                fprintf(stdout,"miniShell ==> ");
-                continue;
+
             }
 
         }
@@ -167,11 +128,10 @@ int main (){
                 pipes = (tPipe *)calloc(line->ncommands-1, sizeof(tPipe)); // Array dinámico de los pipes
             }
         }
-        if (j > 10){
-            ldJobs = realloc(ldJobs, (j*2) * sizeof(tJob));
-            if (ldJobs == NULL ){
-                fprintf(stderr,"Ha surgido un error al reservar espacio en memoria, no caben más procesos en 2º plano\n");
-            }
+        if (isFull(fgList)){
+            reallocJobs(fgList);
+        } else if (isFull(bgList)){
+            reallocJobs(bgList);
         }
 
         // Crear los pipes  /////////////////////////////////////////////////////////////////////////////
@@ -321,6 +281,10 @@ void manejador_hijos (){
             exit(1);
         }
     }
+
+}
+
+void manejador_C(){
 
 }
 
