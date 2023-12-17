@@ -1,5 +1,5 @@
 #include "parser.h"
-#include "job.h"
+#include "jobs.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -33,7 +33,8 @@ int main (){
     pid_t pid;
     int i, p; // Variable local para los bucles for
     int status;
-    tJob auxJ; // Variable auxiliar para los jobs
+    tJob * auxJ; // Variable auxiliar para los jobs
+    tJob * auxJ2;
     // Averiguamos el directorio en el que estamos trabajando
     char cwd[1024];
     const char * directorio = getcwd(cwd, sizeof(cwd));
@@ -66,18 +67,18 @@ int main (){
             fprintf(stdout,"Saliendo de msh...\n");
             // Matar a los procesos que aún no han terminado
             for (i = getIndex(fgList); i > 0; i--){
-                hijos = getPids(fgList, i);
+                hijos = killPids(fgList, i);
                 p = 0;
-                while (hijos[p] != NULL){
-                    kill(9, hijos[i]);
+                while (hijos[p] > 0){
+                    kill(9, hijos[p]);
                     p++;
                 }
             }
             for (i = getIndex(bgList); i > 0; i--){
-                hijos = getPids(bgList, i);
+                hijos = killPids(bgList, i);
                 p = 0;
-                while (hijos[p] != NULL){
-                    kill(9, hijos[i]);
+                while (hijos[p] > 0){
+                    kill(9, hijos[p]);
                     p++;
                 }
             }
@@ -100,22 +101,25 @@ int main (){
 
         } else if (strcmp("fg\n", line->commands[0].argv[0]) == 0){ // fg
             if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
-                job = getFirstJob(bgList);
-                if (job != NULL){
-                    addJob(job, fgList);
-                    deleteJob(job, bgList);
-                    waitpid(getLastPid(job), NULL, 0);
-                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", getLastPid(job));
+                auxJ2 = getFirstJob(bgList);
+                if (auxJ2 != NULL){
+                    addJob(auxJ2, fgList);
+                    deleteJob(auxJ2, bgList);
+                    pid = getLastPid(auxJ2);
+                    waitpid(pid, NULL, 0);
+                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
                 } else {
                     fprintf(stdout,"No hay procesos en segundo plano\n");
                 }
             } else { // Se ha dado un pid
-                if (isIn(line->commands[0].argv[1], bgList)){ // Comprobar pid
-                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", line->commands[0].argv[1]);
-                    job = getJobByPid(line->commands[0].argv[1], bgList);
-                    addJob(job, fgList);
-                    deleteJob(job, bgList);
-                    waitpid(line->commands[0].argv[1] , NULL , 0);
+            	p = isIn( (int)line->commands[0].argv[1], bgList); // Comprobar pid
+                if (p){ 
+                    pid = (int)line->commands[0].argv[1] ;
+                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
+                    auxJ2 = getJobByPid(pid, bgList);
+                    addJob(auxJ2, fgList);
+                    deleteJob(auxJ2, bgList);
+                    waitpid(pid , NULL , 0);
                 } else {
                     fprintf(stderr, "El PID pasado no es válido\n");
                 }
@@ -169,12 +173,12 @@ int main (){
 
         // Distintición entre bg y fg
         if ( !(line->background) ){
-            initJobNoStatus(auxJ, getContador(fgList), hijos[line->ncommands-1], hijos , name  );
+            initJobNoStatus( auxJ, getContador(fgList), hijos[line->ncommands-1], hijos , buf  );
             addJob(auxJ, fgList);
             waitpid(hijos[line->ncommands-1], NULL, 0);
         } else {
             waitpid(hijos[line->ncommands-1], &status , WNOHANG);
-            initJob(auxJ, getContador(bgList), hijos[line->ncommands-1], hijos, status , name  );
+            initJob(auxJ, getContador(bgList), hijos[line->ncommands-1], hijos, status , buf  );
             addJob(auxJ, bgList);
             fprintf(stdout, "[%d] %d\n", getContador(bgList), hijos[line->ncommands-1]);
         }
@@ -291,12 +295,12 @@ void manejador_hijos (){
 
 void manejador_C(){
     pid_t * auxP = (pid_t *)calloc (5, sizeof(pid_t));
-    tJob auxJ ;
+    tJob * auxJ ;
     int i = 0;
     auxJ = getFirstJob(fgList);
     auxP = getPids(auxJ);
     deleteJob(auxJ, fgList);
-    while (auxP[i] != NULL){
+    while (auxP[i] > 0){
         kill(2, auxP[i]);
         i++;
     }
@@ -319,4 +323,3 @@ void cd(){
         }
     }
 }
-
