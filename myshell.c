@@ -22,7 +22,7 @@ int mandato; // Variable para indicar que mandato toca ejecutar
 
 //// DECLARACIÓN DE FUNCIONES ////////////////////////////////////////////////////////////
 void manejador_hijos ();
-void manejador_C(int sig);
+void manejador_C();
 void cd();
 //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -291,24 +291,19 @@ void manejador_hijos (){
 }
 
 //// CTRL+C PARA PROCESOS EN FG //////////////////////////////////////////////////////////////
-void manejador_C(int sig){
-    signal(sig, SIG_IGN);
-    fprintf(stdout, "AAAAAAAAAAAAAAAAAAAAA\n");
-    printJobs(fgList);
-    pid_t auxP [5];
+void manejador_C(){
     tJob trabajo ;
-    int i ;
+    fgList = clean(fgList);
     if (getIndex(fgList) > 0){
     	fgList = clean(fgList);
 	trabajo = getFirstJob(fgList);
 	getPids(trabajo, auxP);
 	fgList = deleteJob(trabajo, fgList);
 	if (waitpid(trabajo.lastPid, NULL , WNOHANG) == 0){ // No ha terminado
-		for (i = 0; i < 5; i++){ 
-	    		kill(2, auxP[i]);
-	    	}
+		kill(trabajo.lastPid, 2);
 	 }
     }
+    
     
 }
 
