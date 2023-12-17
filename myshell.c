@@ -43,20 +43,20 @@ int main (){
     hijos = (pid_t *)calloc (5, sizeof(pid_t));
     pipes = (tPipe *)calloc(4, sizeof(tPipe));
     // Inicializar las listas de foreground y background
-    initJobs(fgList);
-    initJobs(bgList);
-
+    fgList = initJobs();
+    bgList = initJobs();
+    
     // SIGNAL
-    signal(2 , manejador_C); // CTRL + C
+    signal(SIGINT , manejador_C); // CTRL + C
     signal(SIGUSR1, manejador_hijos);
 
     // INICIA LA MYSHELL ////////////////////////////////////////////////////////
-    fprintf(stdout, "msh %s)> ", directorio);
+    fprintf(stdout, "msh (%s)> ", directorio);
     while (fgets(buf, 1024, stdin)) {
-	
+        fgList = clean(fgList);
         // Si la línea no contiene nada directamente ejecutamos de nuevo el prompt:
         if (strcmp("\n", buf) == 0) {
-            fprintf(stdout,"msh %s)> ", directorio);
+            fprintf(stdout,"msh (%s)> ", directorio);
             continue;
         }
 
@@ -65,45 +65,50 @@ int main (){
         if (line==NULL) {
             fprintf(stderr,"Ha surgido un error al reservar espacio en memoria\n");
             continue;
-        } else if (strcmp("exit", line->commands[0].argv[0]) == 0){
+            
+        } else if (strcmp("exit", line->commands[0].argv[0]) == 0){ //////////////////// Salir de la minishell
             fprintf(stdout,"Saliendo de msh...\n");
             // Matar a los procesos que aún no han terminado
+            
             for (i = getIndex(fgList); i > 0; i--){
             	killPids(fgList, k, i);
-                for (i = 0; i < 5; i++){ 
-                	kill(2, k[i]);
+                for (p = 0; p < 5; p++){ 
+                	kill(2, k[p]);
 		}
             }
             for (i = getIndex(bgList); i > 0; i--){
                 killPids(bgList, k, i);
-                for (i = 0; i < 5; i++){ 
-                	kill(2, k[i]);
+                for (p = 0; p < 5; p++){ 
+                	kill(2, k[p]);
 		}
 	    }
 	    
             // Liberar memoria dinamica
             free(pipes);
             free(hijos);
-            
             return 0;
 
 
-        } else if (strcmp(line->commands[0].argv[0], "cd") == 0) {  // Comprobamos si es el mandato cd:
+        } else if (strcmp(line->commands[0].argv[0], "cd") == 0) {  	// Comprobamos si es el mandato cd:
             cd();
 
-        } else if ( strcmp("jobs", line->commands[0].argv[0]) == 0){ // jobs
+        } else if ( strcmp("jobs", line->commands[0].argv[0]) == 0){ 	// jobs 
                 printJobs(bgList);
+                bgList = clean(bgList);
                 fprintf(stdout, "msh (%s)> ", directorio);
             continue;
 
-        } else if (strcmp("fg", line->commands[0].argv[0]) == 0){ // fg
+
+        } else if (strcmp("fg", line->commands[0].argv[0]) == 0){ 	// fg
+            bgList = clean(bgList);
             if (line->commands[0].argv[1] == NULL){  // Solo se ha puesto fg
                 auxJ2 = getFirstJob(bgList);
                 if (getIndexJob(auxJ2) != -1){
-                    addJob(auxJ2, fgList);
-                    deleteJob(auxJ2, bgList);
+                    fgList = addJob(auxJ2, fgList);
+                    bgList = deleteJob(auxJ2, bgList);
                     pid = getLastPid(auxJ2);
-                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
+                    
+                    fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid );
                     waitpid(pid, NULL, 0);
                 } else {
                     fprintf(stdout,"No hay procesos en segundo plano\n");
@@ -114,8 +119,8 @@ int main (){
                     pid = (int)&line->commands[0].argv[1] ;
                     fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
                     auxJ2 = getJobByPid(pid, bgList);
-                    addJob(auxJ2, fgList);
-                    deleteJob(auxJ2, bgList);
+                    fgList = addJob(auxJ2, fgList);
+                    bgList = deleteJob(auxJ2, bgList);
                     waitpid(pid , NULL , 0);
                 } else {
                     fprintf(stderr, "El PID pasado no es válido\n");
@@ -124,7 +129,7 @@ int main (){
             fprintf(stdout, "msh (%s)> ", directorio);
             continue;
         }
-
+	
 
         // Redimensionar si fuera necesario  /////////////////////////////////////////////////////////
         if (line->ncommands > 5){
@@ -143,12 +148,12 @@ int main (){
         }
 
         //Crear un hijo para cada mandato  /////////////////////////////////////////////////////////////
-        for (i = 0 ; i < line->ncommands; i ++){
+        for (mandato = 0 ; mandato < line->ncommands; mandato ++){
             pid = fork();
             if (pid == 0){
                 pause(); //Dejar esperandolos hasta recibir una señal
             } else {
-                hijos[i] = pid;
+                hijos[mandato] = pid;
             }
         }
 
@@ -165,14 +170,14 @@ int main (){
 
         // Distintición entre bg y fg
         if ( !(line->background) ){
-            initJobNoStatus( auxJ, getContador(fgList), hijos[line->ncommands-1], hijos , buf  );
-            addJob(auxJ, fgList);
+            auxJ = initJobNoStatus( getContador(fgList), hijos[line->ncommands-1], hijos , buf  );
+            fgList = addJob(auxJ, fgList);
             waitpid(hijos[line->ncommands-1], NULL, 0);
         } else {
             waitpid(hijos[line->ncommands-1], &status , WNOHANG);
-            initJob(auxJ, getContador(bgList), hijos[line->ncommands-1], hijos, status , buf  );
-            addJob(auxJ, bgList);
+            auxJ = initJob(getContador(bgList), hijos[line->ncommands-1], hijos, status , buf  );
             fprintf(stdout, "[%d] %d\n", getIndexJob(auxJ), getLastPid(auxJ));
+            bgList = addJob(auxJ, bgList);
         }
 
         directorio = getcwd(cwd, sizeof(cwd));
@@ -187,7 +192,7 @@ int main (){
 void manejador_hijos (){
     int file_input, file_output, file_error;  //Ficheros utilizados si hay redirecciones de input, output o error
     int i ; // Variable local para los bucles for
-
+    
     if ( line->ncommands != 1 && mandato == line->ncommands-1 ){ // Ultimo hijo utimo mandato m, distinto de 0 ////////////
         //  Redirección de entrada
         dup2(pipes[mandato-1].tuberia[0], 0);
@@ -287,15 +292,18 @@ void manejador_hijos (){
 
 //// CTRL+C PARA PROCESOS EN FG //////////////////////////////////////////////////////////////
 void manejador_C(){
-    pid_t auxP [5];
-    tJob auxJ ;
-    int i = 0;
-    auxJ = getFirstJob(fgList);
-    getPids(auxJ, auxP);
-    deleteJob(auxJ, fgList);
-    for (i = 0; i < 5; i++){ 
-    	kill(2, auxP[i]);
+    tJob trabajo ;
+    fgList = clean(fgList);
+    if (getIndex(fgList) > 0){
+    	fgList = clean(fgList);
+	trabajo = getFirstJob(fgList);
+	getPids(trabajo, auxP);
+	fgList = deleteJob(trabajo, fgList);
+	if (waitpid(trabajo.lastPid, NULL , WNOHANG) == 0){ // No ha terminado
+		kill(trabajo.lastPid, 2);
+	 }
     }
+    
     
 }
 
