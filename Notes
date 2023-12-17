@@ -9,4 +9,4 @@ gcc -c jobs.c -o jobs.o
 
 ar -rv libjobs.a jobs.o
  
-gcc -Wall -Wextra shell.c libparser.a libjobs -o shelltest -static
+gcc -Wall -Wextra shell.c libparser.a libjobs.a -o shelltest -static
