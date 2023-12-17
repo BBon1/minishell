@@ -101,7 +101,7 @@ jobList update(jobList lista){
     return lista;
 }
 
-jobList updateFG(jobList lista){
+jobList clean(jobList lista){
     int i ;
     int eliminados = 0;
     for (i = 0; i < lista.index; i++) {
