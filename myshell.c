@@ -114,9 +114,9 @@ int main (){
                     fprintf(stdout,"No hay procesos en segundo plano\n");
                 }
             } else { // Se ha dado un pid
-            	p = isIn( (int)&line->commands[0].argv[1], bgList); // Comprobar pid
+            	p = isIn( atoi(line->commands[0].argv[1]), bgList); // Comprobar pid
                 if (p){ 
-                    pid = (int)&line->commands[0].argv[1] ;
+                    pid = atoi(line->commands[0].argv[1]);
                     fprintf(stdout,"Pasando el proceso %d a primer plano\n", pid);
                     auxJ2 = getJobByPid(pid, bgList);
                     fgList = addJob(auxJ2, fgList);
@@ -297,7 +297,7 @@ void manejador_C(){
     if (getIndex(fgList) > 0){
     	fgList = clean(fgList);
 	trabajo = getFirstJob(fgList);
-	getPids(trabajo, auxP);
+	// getPids(trabajo, auxP);
 	fgList = deleteJob(trabajo, fgList);
 	if (waitpid(trabajo.lastPid, NULL , WNOHANG) == 0){ // No ha terminado
 		kill(trabajo.lastPid, 2);
